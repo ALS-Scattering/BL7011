@@ -1,5 +1,6 @@
 import json
-
+import numpy as np 
+import h5py
 
 def get_positions_from_bluesky_json(jsonfilename:str, motornames:list) -> dict:
     """
@@ -61,3 +62,39 @@ def get_positions_from_bluesky_json(jsonfilename:str, motornames:list) -> dict:
         all_positions[motorname] = position_list
     # return motor positions as a numpy array
     return all_positions
+
+
+def where_is_my_frame_missing(h5filename:str):
+    
+    """
+    TODO - NOT FINISHED yet
+
+    """
+    f = h5py.File(h5filename, 'r+')
+    scan_times = f["entry"]["instrument"]["NDAttributes"]["NDArrayTimeStamp"][:]
+    f.close()
+    frame_count = 1
+    frame_count_list = []
+    
+    time_differences = []
+    
+    for i in range(len(scan_times)-1):
+        time_difference = scan_times[i+1] - scan_times[i]
+        time_differences.append(time_difference)
+    
+    min_time_difference = np.min(time_differences)
+    max_time_difference = np.max(time_differences)
+    #print(time_differences)
+    for i in range(len(scan_times)-1):
+
+        time_difference = scan_times[i+1] - scan_times[i]
+        if time_difference < max_time_difference-min_time_difference:
+            frame_count_list.append(frame_count)
+
+            frame_count = 1
+
+        else:
+
+            frame_count += 1
+            
+    return np.argmin(np.array(frame_count_list))

@@ -1,6 +1,6 @@
 import os
 from distutils.core import setup
-__authors__ = 'Damian Guenzing \n Dayne Y. Sasaki \n Ryan Tumbleson'
+__authors__ = 'Damian Guenzing \n Dayne Y. Sasaki \n Zoey Tumbleson'
 
 
 _version__ = None

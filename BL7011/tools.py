@@ -1,4 +1,7 @@
 import json
+import numpy as np 
+import h5py
+import matplotlib.pyplot as plt
 
 
 def get_positions_from_bluesky_json(jsonfilename:str, motornames:list) -> dict:
@@ -61,3 +64,62 @@ def get_positions_from_bluesky_json(jsonfilename:str, motornames:list) -> dict:
         all_positions[motorname] = position_list
     # return motor positions as a numpy array
     return all_positions
+
+
+def where_is_my_frame_missing(h5filename:str, plot=False):
+    """
+    When in the bluesky exporter None is selected it exports the collected 
+    detector data in an .h5 file while the recorded metadata from labview 
+    is written to a .json file. This function prints out where a missing frame
+    can be inserted. Only works so far if only one frame is missing.
+
+    
+    Parameters
+    ----------
+    h5filename : str
+        whole path of the .json-file exported by bluesky exporter
+    plot : bool
+        plots out the differences in timestamps to evaluate
+
+    Returns
+    -------
+    here : int
+        index where the frame is missing
+
+    """
+    # reading in the file and selecting the time stamps
+    f = h5py.File(h5filename, 'r+')
+    scan_times = f["entry"]["instrument"]["NDAttributes"]["NDArrayTimeStamp"][:]
+    f.close()
+
+    # taking the difference between the timestamps
+    diff_scan_times = np.diff(scan_times)
+
+    # plot if wanted
+    if plot:
+        plt.figure()
+        plt.plot(diff_scan_times,marker="o")
+        plt.show()
+
+    # trying to find the time which is only once present
+    # this will be the area where the frame is missing 
+    # start with 2 decimal points 
+    for n in reversed(range(0,2)):
+        diff_scan_times = np.around(diff_scan_times, n)
+        unique, counts = np.unique(diff_scan_times, return_counts=True)
+        dict_uniqques = dict(zip(unique, counts))
+
+        # checkout how many ones there are in dict_uniques
+        ct_1 = 0
+        for i in list(dict_uniqques.keys()):
+            # increase counter when scan duration is only once in the list
+            if dict_uniqques[i] == 1:
+                ct_1 += 1 
+                i_ = i 
+        
+        # save the value if only one one found and break the loop
+        if ct_1 == 1:
+            here = np.argwhere(diff_scan_times == i_)
+            break
+            
+    return int(here.flatten())

@@ -1,6 +1,6 @@
 import numpy as np 
 import h5py
-from tools import where_is_my_frame_missing
+from .tools import where_is_my_frame_missing
 
 
 def import_broken_h5(h5filename : str, average : int = None) -> np.array:

@@ -1,4 +1,4 @@
-from .import_functions import import_broken_h5
+from BL7011.import_functions import import_broken_h5
 
 
 print(

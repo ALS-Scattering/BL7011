@@ -62,18 +62,18 @@ def get_positions_from_bluesky_json(jsonfilename: str, motornames: list) -> dict
                     break
                 except:
                     pass
-            raise Warning(f"No motor positions found for {motorname}. Choose from the following: {available_motors}")
+            raise Warning(
+                f"No motor positions found for {motorname}. Choose from the following: {available_motors}"
+            )
         # attach motor name and positions to the dict
         all_positions[motorname] = position_list
     # return motor positions as a numpy array
     return all_positions
 
 
-def where_is_my_frame_missing(h5filename: str,
-                              plot=False,
-                              n_images=10,
-                              eps=0.3,
-                              min_samples=10) -> np.array:
+def where_is_my_frame_missing(
+    h5filename: str, plot=False, n_images=10, eps=0.3, min_samples=10
+) -> np.array:
     """
     When in the bluesky exporter None is selected it exports the collected
     detector data in an .h5 file while the recorded metadata from labview
@@ -100,7 +100,7 @@ def where_is_my_frame_missing(h5filename: str,
 
     """
     # reading in the file and selecting the time stamps
-    f = h5py.File(h5filename, 'r')
+    f = h5py.File(h5filename, "r")
     scan_times = f["entry"]["instrument"]["NDAttributes"]["NDArrayTimeStamp"][:]
     f.close()
 
@@ -133,17 +133,21 @@ def where_is_my_frame_missing(h5filename: str,
     # plot if wanted and highlight the outliers
     if plot:
         plt.figure()
-        plt.scatter(range(len(diff_scan_times)), diff_scan_times, c='blue', label='Data points')
-        plt.scatter(outliers, outlier_values, c='red', label='Outliers')
-        plt.title('Timestamp Differences with Outliers')
-        plt.xlabel('Index')
-        plt.ylabel('Timestamp Difference (seconds)')
+        plt.scatter(
+            range(len(diff_scan_times)), diff_scan_times, c="blue", label="Data points"
+        )
+        plt.scatter(outliers, outlier_values, c="red", label="Outliers")
+        plt.title("Timestamp Differences with Outliers")
+        plt.xlabel("Index")
+        plt.ylabel("Timestamp Difference (seconds)")
         plt.legend()
         plt.show()
 
     if n_outlier_values != n_missing:
-        raise ValueError("Number of outlier values does not fit the missing expected number of frames. Try to adjust \
-                         eps value.")
+        raise ValueError(
+            "Number of outlier values does not fit the missing expected number of frames. Try to adjust \
+                         eps value."
+        )
 
     # return the outlier indices
     return outliers

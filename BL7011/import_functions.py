@@ -4,8 +4,14 @@ from .tools import where_is_my_frame_missing
 import tqdm
 
 
-def import_broken_h5(h5filename: str, average: int = 10, verbose: bool = False, roi: list = [0, 2048, 0, 2048],
-                     missing_frames: list = [], eps: float = 0.3) -> np.array:
+def import_broken_h5(
+    h5filename: str,
+    average: int = 10,
+    verbose: bool = False,
+    roi: list = [0, 2048, 0, 2048],
+    missing_frames: list = [],
+    eps: float = 0.3,
+) -> np.array:
     """
     When in the bluesky exporter None is selected it exports the collected
     detector data in an .h5 file while the recorded metadata from labview
@@ -34,8 +40,9 @@ def import_broken_h5(h5filename: str, average: int = 10, verbose: bool = False, 
 
     if len(missing_frames) == 0:
         # Find missing frames in the data
-        missing_frames = where_is_my_frame_missing(h5filename, plot=False,
-                                                   n_images=average, eps=eps)
+        missing_frames = where_is_my_frame_missing(
+            h5filename, plot=False, n_images=average, eps=eps
+        )
     else:
         missing_frames = np.array(missing_frames)
     n_missing_frames = len(missing_frames)
@@ -52,13 +59,17 @@ def import_broken_h5(h5filename: str, average: int = 10, verbose: bool = False, 
     # function to load in the frames
     def load_frames(frame_min, frame_max):
         # Load frames from the h5 file within the specified range and ROI
-        f = h5py.File(h5filename, 'r')
-        data = np.array(f["entry"]["data"]["data"][frame_min:frame_max, roi[0]:roi[1], roi[2]:roi[3]])
+        f = h5py.File(h5filename, "r")
+        data = np.array(
+            f["entry"]["data"]["data"][
+                frame_min:frame_max, roi[0] : roi[1], roi[2] : roi[3]
+            ]
+        )
         f.close()
         return data
 
     # Open the h5 file to determine the number of recorded frames
-    f = h5py.File(h5filename, 'r')
+    f = h5py.File(h5filename, "r")
     for_recorded_frames = np.array(f["entry"]["data"]["data"][:, :1, :1])
     f.close()
     n_recorded_frames = len(for_recorded_frames)
@@ -81,8 +92,10 @@ def import_broken_h5(h5filename: str, average: int = 10, verbose: bool = False, 
             if verbose:
                 print(f"corrections in round {correction_in_round}")
 
-        temp_data = load_frames(frame_min=n * average - already_replaced,
-                                frame_max=((n + 1) * average - already_replaced - correction_in_round))
+        temp_data = load_frames(
+            frame_min=n * average - already_replaced,
+            frame_max=((n + 1) * average - already_replaced - correction_in_round),
+        )
         # Averaging the data frames
         temp_data = np.mean(temp_data, axis=0)
         averages_list.append(temp_data)

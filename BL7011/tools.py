@@ -1,17 +1,20 @@
 import json
-import numpy as np 
+import numpy as np
 import h5py
 import matplotlib.pyplot as plt
+import math
+from sklearn.cluster import DBSCAN
+from sklearn.preprocessing import StandardScaler
 
 
-def get_positions_from_bluesky_json(jsonfilename:str, motornames:list) -> dict:
+def get_positions_from_bluesky_json(jsonfilename: str, motornames: list) -> dict:
     """
-    When in the bluesky exporter None is selected it exports the collected 
-    detector data in an .h5 file while the recorded metadata from labview 
+    When in the bluesky exporter None is selected it exports the collected
+    detector data in an .h5 file while the recorded metadata from labview
     is written to a .json file. This function extracts the motor positions
-    of a given motors for all included scans in the .json file. 
+    of a given motors for all included scans in the .json file.
 
-    
+
     Parameters
     ----------
     jsonfilename : str
@@ -50,13 +53,13 @@ def get_positions_from_bluesky_json(jsonfilename:str, motornames:list) -> dict:
                     pass
         else:
             raise SyntaxError("unknown format of .json file " + jsonfilename)
-    
+
         # if no motor position was found, run through the file again and note down the available motors
         if len(position_list) == 0:
             for n in range(len(data)):
                 try:
                     available_motors = list(data[n][1]["data"].keys())
-                    break 
+                    break
                 except:
                     pass
             raise Warning(f"No motor positions found for {motorname}. Choose from the following: {available_motors}")
@@ -66,60 +69,81 @@ def get_positions_from_bluesky_json(jsonfilename:str, motornames:list) -> dict:
     return all_positions
 
 
-def where_is_my_frame_missing(h5filename:str, plot=False):
+def where_is_my_frame_missing(h5filename: str,
+                              plot=False,
+                              n_images=10,
+                              eps=0.3,
+                              min_samples=10) -> np.array:
     """
-    When in the bluesky exporter None is selected it exports the collected 
-    detector data in an .h5 file while the recorded metadata from labview 
+    When in the bluesky exporter None is selected it exports the collected
+    detector data in an .h5 file while the recorded metadata from labview
     is written to a .json file. This function prints out where a missing frame
-    can be inserted. Only works so far if only one frame is missing.
+    can be inserted. The algorithm is using the DBSCAN module from sklearn to group
+    the timestamp differences.
 
-    
+
     Parameters
     ----------
     h5filename : str
-        whole path of the .json-file exported by bluesky exporter
+        Whole path and name of the .json-file exported by bluesky exporter.
     plot : bool
-        plots out the differences in timestamps to evaluate
+        Plots out the differences in timestamps to evaluate.
+    images : int
+        Number of images per motor position.
+    eps : float
+        eps value to pass to the dbscan algorithm.
 
     Returns
     -------
-    here : int
-        index where the frame is missing
+    outliers : np.array
+        Indexes where the frames are missing.
 
     """
     # reading in the file and selecting the time stamps
-    f = h5py.File(h5filename, 'r+')
+    f = h5py.File(h5filename, 'r')
     scan_times = f["entry"]["instrument"]["NDAttributes"]["NDArrayTimeStamp"][:]
     f.close()
 
+    # calculating how many images are missing. only works if less images are missing
+    n_recorded = len(scan_times)
+    n_missing = math.ceil(n_recorded / n_images) * n_images - n_recorded
     # taking the difference between the timestamps
     diff_scan_times = np.diff(scan_times)
 
-    # plot if wanted
+    X = diff_scan_times.reshape(-1, 1)
+    # Standardize the data
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    # Define the DBSCAN model
+    dbscan = DBSCAN(eps=eps, min_samples=min_samples)
+    # Fit the model to the data
+    dbscan.fit(X_scaled)
+
+    # Get the cluster labels (-1 represents outliers)
+    labels = dbscan.labels_
+
+    # Extract the indices of the outliers
+    outliers = np.where(labels == -1)[0]
+
+    # Get the outlier values
+    outlier_values = diff_scan_times[outliers]
+    n_outlier_values = len(outlier_values)
+
+    # plot if wanted and highlight the outliers
     if plot:
         plt.figure()
-        plt.plot(diff_scan_times,marker="o")
+        plt.scatter(range(len(diff_scan_times)), diff_scan_times, c='blue', label='Data points')
+        plt.scatter(outliers, outlier_values, c='red', label='Outliers')
+        plt.title('Timestamp Differences with Outliers')
+        plt.xlabel('Index')
+        plt.ylabel('Timestamp Difference (seconds)')
+        plt.legend()
         plt.show()
 
-    # trying to find the time which is only once present
-    # this will be the area where the frame is missing 
-    # start with 2 decimal points 
-    for n in reversed(range(0,2)):
-        diff_scan_times = np.around(diff_scan_times, n)
-        unique, counts = np.unique(diff_scan_times, return_counts=True)
-        dict_uniqques = dict(zip(unique, counts))
+    if n_outlier_values != n_missing:
+        raise ValueError("Number of outlier values does not fit the missing expected number of frames. Try to adjust \
+                         eps value.")
 
-        # checkout how many ones there are in dict_uniques
-        ct_1 = 0
-        for i in list(dict_uniqques.keys()):
-            # increase counter when scan duration is only once in the list
-            if dict_uniqques[i] == 1:
-                ct_1 += 1 
-                i_ = i 
-        
-        # save the value if only one one found and break the loop
-        if ct_1 == 1:
-            here = np.argwhere(diff_scan_times == i_)
-            break
-            
-    return int(here.flatten())
+    # return the outlier indices
+    return outliers

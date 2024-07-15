@@ -48,3 +48,5 @@ If you are planning to develop or modify the package, install it in developer mo
 ```sh
 pip install -e . --no-deps
 ```
+
+See `environment_example.yml` for reference.

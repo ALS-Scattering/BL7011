@@ -26,7 +26,9 @@ setup(name='BL7011',
               'numpy',
               'pandas',
               'scipy',
-              'matplotlib'],
+              'matplotlib',
+              'tqdm',
+              'scikit-learn'],
       classifiers=['Development Status :: 4 - Beta',  # Chose either "3 - Alpha", "4 - Beta" or "5 - Production/Stable"
                                                       # as the current state of your package
                    'Intended Audience :: Developers',      # Define that your audience are developers

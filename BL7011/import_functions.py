@@ -2,6 +2,7 @@ import numpy as np
 import h5py
 from BL7011.tools import where_is_my_frame_missing
 import tqdm
+import matplotlib.pyplot as plt
 
 
 def import_broken_h5(
@@ -11,6 +12,8 @@ def import_broken_h5(
     roi: list = [0, 2048, 0, 2048],
     missing_frames: list = [],
     eps: float = 0.3,
+    for_roi: bool = False,
+    save_to_h5 : bool = False,
 ) -> np.array:
     """
     When in the bluesky exporter None is selected it exports the collected
@@ -32,11 +35,32 @@ def import_broken_h5(
         List of missing frames can be also provided manually. where_is_my_frame_missing() funtion will be skipped.
     eps: float
         Value for the eps to pass the where_is_my_frame_missing() function.
+    for_roi : bool
+        Will only important a single frame to plot. Takes frame number as an argument as well.
+    save_to_h5 : bool
+        Will save to h5 file, if string is passed it will use it as filename.
+
+
     Returns
     -------
     data : np.array
         Data as np.array.
     """
+
+    # Plot function to determine the roi while importing and averging.
+    if for_roi:
+        if isinstance(for_roi, bool):
+            for_roi = 0
+        f = h5py.File(h5filename, "r")
+        data = np.array(
+            f["entry"]["data"]["data"][
+                for_roi, :, :
+            ]
+        )
+        f.close()
+        plt.figure()
+        plt.imshow(data)
+        return plt.show()
 
     if len(missing_frames) == 0:
         # Find missing frames in the data
@@ -105,6 +129,22 @@ def import_broken_h5(
         # Reset the correction counter in the round
         correction_in_round = 0
 
+    # Convert list to np.array.
+    averages = np.array(averages_list)
+
+    # Save to h5 if wanted
+    if save_to_h5:
+        # Manipulate the filenames
+        if isinstance(save_to_h5, str):
+            save_to_filename = save_to_h5
+        else:
+            cleaned_h5filename = h5filename.replace(".h5", "")
+            save_to_filename = cleaned_h5filename + "_averages.h5"
+
+        output_h5file = h5py.File(save_to_filename, "w")
+        output_h5file.create_dataset("data", data=averages)
+        output_h5file.close()
+
     # Check if the number of replaced frames matches the missing frames
     if already_replaced != n_missing_frames:
         raise ValueError("number of missing frames does not match the replacement")
@@ -112,5 +152,5 @@ def import_broken_h5(
     if verbose:
         print("converted and averaged")
 
-    # Return the averaged data as a numpy array
-    return np.array(averages_list)
+    # Return the averaged data
+    return averages

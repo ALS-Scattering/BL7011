@@ -9,5 +9,7 @@ print(
         roi=[0, 10, 0, 10],
         missing_frames=[0, 1],
         eps=0.01,
+        for_roi=True,
+        save_to_h5=True
     ).shape
 )

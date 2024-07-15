@@ -1,5 +1,6 @@
 # too large files to test things: 
 test_missing_frames.h5
+test_missing_frames_averages.h5
 
 # meta data file from macOS
 .DS_Store

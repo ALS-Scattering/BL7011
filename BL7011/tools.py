@@ -123,3 +123,36 @@ def where_is_my_frame_missing(h5filename:str, plot=False):
             break
             
     return int(here.flatten())
+
+
+def h5tree(h5filename : str) -> None:
+    """
+    Simple to print out the structure of a H5 file and the shape of the stored datasets.
+
+    Parameters
+    ----------
+    h5filename : str
+        Whole path of the .h5-file.
+
+
+    Returns
+    -------
+    None , but prints the structure of the h5 file.
+    """
+    def recursive_print(val, pre=""):
+        items = len(val)
+        for key, item in val.items():
+            is_last_item = items == 1
+            items -= 1
+            
+            if isinstance(item, h5py.Group):
+                print(pre + ('└── ' if is_last_item else '├── ') + key)
+                recursive_print(item, pre + ('    ' if is_last_item else '│   '))
+            else:
+                item_shape = item.shape if hasattr(item, '__len__') else 'scalar'
+                # print(item_shape)
+                print(pre + ('└── ' if is_last_item else '├── ') + f"{key} ({item_shape})")
+
+    with h5py.File(h5filename, 'r') as hf:
+        print(hf)
+        recursive_print(hf)

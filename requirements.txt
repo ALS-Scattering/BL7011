@@ -5,3 +5,4 @@ pandas>=2.2.2
 scikit-learn>=1.4.2
 scipy>=1.0
 tqdm>=4.66.4
+nexusformat>=1.0.6

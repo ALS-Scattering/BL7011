@@ -13,7 +13,7 @@ def import_broken_h5(
     missing_frames: list = [],
     eps: float = 0.3,
     for_roi: bool = False,
-    save_to_h5 : bool = False,
+    save_to_h5: bool = False,
 ) -> np.array:
     """
     When in the bluesky exporter None is selected it exports the collected
@@ -52,11 +52,7 @@ def import_broken_h5(
         if isinstance(for_roi, bool):
             for_roi = 0
         f = h5py.File(h5filename, "r")
-        data = np.array(
-            f["entry"]["data"]["data"][
-                for_roi, :, :
-            ]
-        )
+        data = np.array(f["entry"]["data"]["data"][for_roi, :, :])
         f.close()
         plt.figure()
         plt.imshow(data)
@@ -98,6 +94,14 @@ def import_broken_h5(
     f.close()
     n_recorded_frames = len(for_recorded_frames)
     intended_n_frames = n_recorded_frames + n_missing_frames
+
+    # check if the number of recorded and expected frames match and if it aligns
+    # with the number of provided frames as well
+    guessed_n_frames_missing = average - n_recorded_frames % average
+    if guessed_n_frames_missing != n_missing_frames:
+        raise ValueError(
+            "number of recorded frames does not match the expected number of frames minus the missing frames"
+        )
 
     # Initialize variables for averaging process
     averages_list = []

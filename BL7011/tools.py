@@ -7,6 +7,8 @@ from sklearn.cluster import DBSCAN
 from sklearn.preprocessing import StandardScaler
 import warnings as w
 
+# from BL7011.import_functions import import_broken_h5
+
 
 def get_positions_from_bluesky_json(jsonfilename: str, motornames: list = []) -> dict:
     """
@@ -156,11 +158,12 @@ def where_is_my_frame_missing(
         plt.legend()
         plt.show()
 
-    if n_outlier_values != n_missing:
-        raise ValueError(
-            "Number of outlier values does not fit the missing expected number of frames. Try to adjust \
-                         eps value."
-        )
+    if n_images != 1:
+        if n_outlier_values != n_missing:
+            raise ValueError(
+                f"{n_outlier_values} outlier values do not fit the {n_missing} missing expected number of frames."
+                + f" Try to adjust eps value for file {h5filename} or number of images, found {n_images}."
+            )
 
     # return the outlier indices
     return outliers

@@ -144,6 +144,13 @@ def import_broken_h5(
                     print(
                         f"correction zero shape: {np.zeros((roi[1] - roi[0], roi[3] - roi[2])).shape}"
                     )
+                temp_data = load_frames(
+                    frame_min=n * average,
+                    frame_max=((n + 1) * average),
+                )
+                if np.isnan(temp_data).any():
+                    w.warn(f"NaN values in the data at frame {n}")
+                averages_list.append(np.array(temp_data).squeeze())
             else:
                 temp_data = load_frames(
                     frame_min=n * average,

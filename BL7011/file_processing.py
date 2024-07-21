@@ -12,6 +12,8 @@ from os.path import basename
 import nexusformat.nexus
 import pandas as pd
 import h5py
+from IPython.display import display
+import itertools
 
 
 def get_all_file_names(
@@ -19,7 +21,7 @@ def get_all_file_names(
         *,
         search: str = '',
         verbose: bool = True,
-):
+) -> dict[int, str]:
     """
     Gets all the names of files with an ".h5" extension in the directory
     "path_dir" and stores the associated paths in a dictionary.
@@ -43,7 +45,6 @@ def get_all_file_names(
         A dictionary containing path names of h5 files, sorted in descending
         file name
     """
-
     # Get a dictionary of ".h5" file path names
     path_file: dict[int, str] = dict(
         (index, path)  # Get both the h5 file path and index...
@@ -61,38 +62,80 @@ def get_all_file_names(
     return path_file
 
 
+def dict_to_df(
+        path_dict: dict[int, str],
+        *,
+        value_title: str = '',
+        verbose: bool = False
+) -> pd.DataFrame:
+    """
+    Takes a dictionary of and saves it as a Pandas data frame. This function
+    is largely intended to use with get_all_file_names to convert dictionaries
+    with path names into a Pandas data frame.
+
+    Parameters
+    ----------
+    path_dict: dict[int,str]
+        Dictionary of integer (keys) and file path names (values) (e.g., the
+        output from get_all_file_names)
+    value_title: str
+        Sets the name of the column containing the values
+    verbose: boolean
+        Shows the pandas data frame
+
+    Returns
+    -------
+    path_df: pd.DataFrame
+        A Pandas data frame
+    """
+    # Convert file_dict into a Pandas DataFrame
+    path_df = pd.DataFrame(path_dict, index=[0]).T
+
+    # Change the '0' column name to value_title
+    path_df.rename(columns={0: value_title}, inplace=True)
+
+    if verbose:
+        # This is used to visualize all the entries within a pandas dataframe
+        pd.set_option('display.max_colwidth', 0)
+
+        # Show the pandas df
+        display(path_df)
+
+    return path_df
+
+
 def get_labview_ccd_groups(
         hdf5_group_instrument: h5py._hl.dataset.Dataset,
 ) -> h5py._hl.dataset.Dataset:
     """
-        Access and store HDF5 Group 'labview_data' and 'detector_1' under the
-        path /entry1/instrument_1/
+    Access and store HDF5 Group 'labview_data' and 'detector_1' under the
+    path /entry1/instrument_1/
 
-        i.e., hdf5_group_instrument from the statement below:
-            with h5py.file(<file name>, 'r') as h5_file:
-                hdf5_group_statement = h5_file
+    i.e., hdf5_group_instrument from the statement below:
+        with h5py.file(<file name>, 'r') as h5_file:
+            hdf5_group_statement = h5_file
 
-        PARAMETERS
-        -----
-        hdf5_group: h5py._hl.dataset.Dataset
-            A HDF5 file object
+    PARAMETERS
+    -----
+    hdf5_group: h5py._hl.dataset.Dataset
+        A HDF5 file object
 
-        index: int
-            Index of the image within an image stack in the HDF5 file
+    index: int
+        Index of the image within an image stack in the HDF5 file
 
-        correction: str
-            Type of intensity correction to perform on the CCD image 'ccd_image'
-                - Nothing : Return the raw ccd image
-                - 'i0 norm' : Normalize ccd image by the right blade current
-                - 'cps' : Normalize ccd image by acquisition time (counts per sec)
+    correction: str
+        Type of intensity correction to perform on the CCD image 'ccd_image'
+            - Nothing : Return the raw ccd image
+            - 'i0 norm' : Normalize ccd image by the right blade current
+            - 'cps' : Normalize ccd image by acquisition time (counts per sec)
 
-        RETURNS
-        -----
-        ccd_image: np.ndarray
-            A M x N image
+    RETURNS
+    -----
+    ccd_image: np.ndarray
+        A M x N image
 
-        TODO: Finish writing this up you dingus!
-        """
+    TODO: Finish writing this up you dingus!
+    """
     return None
 
 
@@ -190,22 +233,164 @@ def store_h5_ccd_image(
         h5_labview_db = h5_inst_db['labview_data']
 
         # Generate numpy array to store the CCD images
-        number_images = h5_ccd_db.shape[0]  # Number of images in the stack
+        number_images = h5_ccd_db.shape[1]  # Number of images in the stack
         number_pixels = h5_ccd_db.shape[2]  # Number of pixels in row/col
         ccd_image = np.empty([number_images, number_pixels, number_pixels])
 
         # Iterate through all the individual images in the stack
+        """
         for index in range(number_images):
             # Get the image
-            ccd_image[index] = get_single_ccd_image(h5_inst_db, index, correction)
+            ccd_image[index] = get_single_ccd_image(h5_inst_db,
+                                                    index,
+                                                    correction)
+                                                    """
 
-    return ccd_image
+        p = get_single_ccd_image(h5_inst_db, 0, correction)
+    return p
+
+
+def group_files_in_dir(
+        path_dir: str,
+        *,
+        key_common: str | tuple[str],
+        key_variable: str,
+        search: str = '',
+        verbose: bool = False
+) -> tuple[pd.DataFrame, pd.DataFrame, list[pd.Series]]:
+    """
+        Looks at all HDF5 CCD files within a directory and identifies
+        determines groups of files ("file groups") which share desired 
+        combinations of similar and dissimilar HDF5 keys ("metadata").
+
+        The function outputs a dictionary, where each key:value pair
+        corresponds with a single file group. The dictionary values contain
+        Pandas Dataframe containing the file paths and relevant metadata for
+        each individual file within the file group.
+
+        Given a list of HDF5 keys, this function will determine all unique
+        combinations of HDF5 key values and search for files which share
+        these common characteristics; this defines a file group.
+
+        ASSUMPTIONS
+        -----
+        1) The individual files within a file group share similar names (i.e.,
+            the names are not 100% different)
+
+        PARAMETERS
+        -----
+        path_dir: str
+            The pathname of the directory (i.e., folder) which contains the h5
+
+        key_common: str or tuple[str]
+            HDF5 keys/Labview entries which are common to a group of data files
+
+        key_variable: str
+            HDF5 keys/Labview entry which is differ between the individual
+            files within a file group
+
+        search: str
+            "search" is a string that the function will look for in the
+            different file names. Specifying "search" will cause the function
+            to only return those file names which contain the specified string.
+
+        verbose: bool
+            Will enable/disable the outputs of get_all_file_names and
+            dict_to_df in the function
+
+        RETURNS
+        -----
+        (file_properties, unique_positions, file_group): tuple
+            file_properties: pd.DataFrame
+                Data frame with list of path names along with their associated
+                key_common and key_variable position values
+            unique_positions: pd.DataFrame
+                Data frame containing the unique key_common and key_variable
+                position value combinations observed across all the files.
+                EACH ROW IN UNIQUE_POSITION REPRESENTS PARAMETERS SHARED
+                BY A FILE GROUP
+            file_group: list[pd.Series] (dtype boolean)
+                Indicates which rows in file_properties belong to a file_group
+                (i.e., a row in unique_positions)
+                For instance, file_properties[file_group[0]] will pull all
+                the files which possesses position value combinations in
+                unique_positions.loc[[0]]
+    """
+    # This is used to visualize all the entries within a pandas dataframe
+    pd.set_option('display.max_colwidth', 0)
+
+    # Grab all the file names in the directory and put them in a dict
+    file_paths = get_all_file_names(path_dir, search=search, verbose=verbose)
+
+    # Convert file_paths into a Pandas DataFrame
+    file_properties = dict_to_df(file_paths, value_title='path', verbose=verbose)
+
+    # Check if keys_common and/or key_variable are tuples or str.
+    # If they are strings, then convert them to tuples.
+    if isinstance(key_common, str):
+        key_common = (key_common,)
+
+    if isinstance(key_variable, str):
+        key_variable = (key_variable,)
+
+    # Create empty columns in file_properties to later fill with labview
+    # data associated with each file path
+    for entry in key_common + key_variable:
+        file_properties[entry] = pd.Series(dtype='float')
+
+    # Populate file_properties with the desired labview data (keys_common
+    # and keys_different)
+    for idx in file_properties.index:
+        # Open one h5 file at a time
+        with h5py.File(file_paths[idx], 'r') as h5_file:
+            # Iterate over all the keys_common and keys_different entries
+            for entry in key_common + key_variable:
+                file_properties.at[idx, entry] = round(h5_file['entry1']
+                                                       ['instrument_1']
+                                                       ['labview_data']
+                                                       [entry]
+                                                       [0], 2)
+
+    # Get a smaller dataframe with lists the unique combination of key_common
+    # position values (not the name of the key, but the value associated with
+    # it)  along with number of files which possess those values (i.e., the
+    # number of file group members, which is also the number of key_variable
+    # files within the file group)
+    unique_positions = \
+        file_properties.groupby(
+            list(key_common)).size().reset_index().rename(columns={0:'counts'})
+
+    # Generate a 1 x N list of Pandas series (dtype boolean, 1 x M) which can
+    # be used to pull select parts of file_properties (M) based on a desired
+    # set of unique_position values (N)
+
+    # First, generate a L x N list of series booleans which come from logical
+    # statements (such as "detector_rotate == 6.0") for key_common values (L)
+    # and their associated position values (N)
+    # len(equal_table) = # of key_common values (L)
+    # len(equal_table[0]) = # of unique_positions (N)
+    # len(equal_table[0][0]) = # of individual files in file_properties
+    equal_table = [[file_properties[col_name] == value for value in
+                    unique_positions[col_name]] for col_name in key_common]
+
+    # Reduce the table into a 1 X N list
+    # Start off by pulling the first column of equivalency_table
+    file_group = equal_table[0]
+    # Perform logical operation across the key_common values (N) for each
+    # unique_position (M)
+    for compare_list in equal_table:
+        file_group = [file_group[count] & compare_value \
+                      for count, compare_value in enumerate(compare_list)]
+
+    # K, we're dun
+    return file_properties, unique_positions, file_group
+
 
 def batch_file_processing(
         path_dir: str,
         *,
-        labview_simiar: tuple[str],
-        labview_dissimilar: tuple[str],
+        keys_common: str | tuple[str],
+        key_variable: str | tuple[str],
         search: str = '',
         correction: str = '',
         verbose: bool = True,
@@ -217,15 +402,23 @@ def batch_file_processing(
     doesn't screw up the operation of the code
     - Make certain parts (i.e., pair processing) their own dedicated functions
     - Ability to save result data
+    - Make this a decorator factory?
+    - Give the user the ability to define multiple keys for keys_common
+        and keys_different
+    - Change this into a different function called file_grouper
 
     Performs batch processing of all COSMIC Scattering data files within a
     specified directory.
 
     This function specifically looks at all the h5 files within a directory
     and groups them based on similar/dissimilar metadata they share (e.g.,
-    polarization, energy, angle) which must be specified by the user. Several
-    operations (specified by the user) will be evaluated using all the data
+    polarization, energy, angle) which must be specified by the user. The files
+    within a group will be processed using user-defined functions in the
     files within a group
+
+    Possible thing to include:
+    Try/catch statement for handling data files with where_is_my_frame_missing
+    Include a repair function to handle broken h5 files
 
     Examples
         - Dichroism calculated between pairs of different polarizations
@@ -246,30 +439,29 @@ def batch_file_processing(
     path_dir: str
         The pathname of the directory (i.e., folder) which contains the h5 data
 
-    labview_similar: tuple[str]
-        Labview keys which will be similar for the operations
+    keys_common: str or tuple[str]
+        HDF5 keys/Labview entries which are common to a group of data files.
 
-    labview_dissimilar: tuple[str]
-        Labview keys which will be dissimilar for the operations
-        These keys will define the individual file groups
-
+    keys_different: str or tuple[str]
+        HDF5 keys/Labview entries which are different across the entire
+        collection of data files to be examined.
 
     search: str
-        "search" is a string that the function will look for in the different file names.
-        Specifying "search" will cause the function to only return those file names which
-        contain the specified string.
+        "search" is a string that the function will look for in the different
+        file names. Specifying "search" will cause the function to only return
+        those file names which contain the specified string.
 
     save_file: bool
         If enabled, will
 
     verbose: bool
-        If set to True, the function will print out a list of the acquired file paths along with
-        the associated polarization, 2theta, and detector position values. By default this is
-        set to True.
+        If set to True, the function will print out a list of the acquired file
+        paths along with the associated polarization, 2theta, and detector
+        position values. By default this is set to True.
 
     diagnostic: bool
-        Similar to verbose, but displays some additional pandas dataframes. Namely,
-        file_properties and unique_det_positions
+        Similar to verbose, but displays some additional pandas dataframes.
+        Namely, file_properties and unique_det_positions
 
     RETURNS
     -----
@@ -285,47 +477,55 @@ def batch_file_processing(
                                     verbose=True)
 
     # Convert file_paths into a Pandas DataFrame
-    file_properties = pd.DataFrame(file_paths).T
+    file_properties = pd.DataFrame(file_paths, index=[0]).T
+
+    # Change the '0' column name to 'path'
+    file_properties.rename(columns={0: 'path'}, inplace=True)
+
+    # Check if keys_common and keys_different are tuples or str.
+    # If they are strings, then convert them to tuples. This is for a future
+    # feature I'd like to implement to allow for multiple strings to be
+    # used in this function
+    if isinstance(keys_common, str):
+        keys_common = (keys_common,)
+    if isinstance(keys_different, str):
+        keys_different = (keys_different,)
+
+    # Throw a not implemented error if a tuple with more than 1 element is used
+    if len(keys_common) > 1 or len(keys_different) > 1:
+        raise NotImplementedError(
+            "Please only enter one key for keys_common and keys_different")
 
     # Create empty columns in file_properties to later fill with labview
     # data associated with each file path
-    for entry in labview_simiar + labview_dissimilar:
+    for entry in keys_common + keys_different:
         file_properties[entry] = pd.Series(dtype='float')
 
-    # Populate file_properties with the desired labview data (labview_similar
-    # and labview_dissimilar)
+    # Populate file_properties with the desired labview data (keys_common
+    # and keys_different)
     for idx in file_properties.index:
         # Open one h5 file at a time
-        with h5py.File(file_paths[key], 'r') as h5_file:
-            # Iterate over all the labview_similar and labview_dissimilar
+        with h5py.File(file_paths[idx], 'r') as h5_file:
+            # Iterate over all the keys_common and keys_different
             # entries
-            for entry in labview_similar + labview_dissimilar:
-                file_properties[entry] = round(h5_file['entry1']
-                                               ['instrument_1']
-                                               ['labview_data']
-                                               [entry]
-                                               [0], 2)
+            for entry in keys_common + keys_different:
+                file_properties.at[idx, entry] = round(h5_file['entry1']
+                                                       ['instrument_1']
+                                                       ['labview_data']
+                                                       [entry]
+                                                       [0], 2)
 
-    # Update the column names
-    tup_keys = tuple(1 + range(len(labview_simiar + labview_dissimilar)))
-    tup_val = tuple(('path') + labview_simiar + labview_dissimilar)
-    file_properties = file_properties.rename(
-        columns=dict(zip(tup_keys, tup_val)))
-
-    # Displays file_properties if diagnostic is enabled
-    if diagnostic:
-        print('-------------------------------------\nfile_properties')
-        display(file_properties.sort_values(
-            by=['tth', 'det translate', 'polarization']))
-
-    # Get a smaller dataframe which lists the unique combinations of 2Theta
-    # and Det translate in the file_properties.
+    # Get a smaller dataframe which lists the unique combinations of
+    # keys_common and keys_different in file_properties. The column
+    # 'counts' here represents the number of times this unique combination of
+    # HDF5 keys are observed across the data files in file_properties.
     unique_det_positions = file_properties.groupby(
-        ['tth', 'det translate']).size().reset_index().rename(
+        list(keys_common + keys_different)).size().reset_index().rename(
         columns={0: 'counts'})
 
-    # Get rid of any entries in unique_2Theta_Det_translate which have counts less than or equal to 1
-    # since we need 2 images with different polarizations to do dichroism calculations
+    # Get rid of any entries in unique_2Theta_Det_translate which have counts
+    # less than or equal to 1 since we need 2 images with different
+    # polarizations to do dichroism calculations
     unique_det_positions = unique_det_positions.drop(
         unique_det_positions.loc[unique_det_positions['counts'] <= 1].index)
 
@@ -350,14 +550,17 @@ def batch_file_processing(
             (file_properties['det translate'] == current_det_translate)]
 
         # Pull out the files which have the 2 desired polarization states
+        """
         idx_state_1 = file_set.loc[
             file_properties['polarization'] == POLARIZATION_STATE[
                 0]].index.values
         idx_state_2 = file_set.loc[
             file_properties['polarization'] == POLARIZATION_STATE[
                 1]].index.values
+        """
 
         # Only perform subsequent calculations if both file_state_* have exactly one entry
+        """
         if idx_state_1.shape[0] == 1 and idx_state_2.shape[0] == 1:
 
             # If verbose is enabled, print out the dataframe
@@ -371,7 +574,7 @@ def batch_file_processing(
             file_path_2 = file_set.loc[idx_state_2]['file path'].values[0]
             ccd_state_1 = get_h5_ccd_image(file_path_1, correction)
             ccd_state_2 = get_h5_ccd_image(file_path_2, correction)
-
+        """
     # Let user know the function is done
     print('Function is done. D-U-N')
     return file_properties

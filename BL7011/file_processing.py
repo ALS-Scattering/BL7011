@@ -5,15 +5,16 @@
 
     Authors: Dayne Sasaki, Damian Günzing
 """
+import os.path
 
 import numpy as np
 from glob import glob
 from os.path import basename
-import nexusformat.nexus
 import pandas as pd
 import h5py
 from IPython.display import display
-import itertools
+from BL7011 import data_processing as dp
+from BL7011 import plotting as plt
 
 
 def get_all_file_names(
@@ -46,7 +47,7 @@ def get_all_file_names(
         file name
     """
     # Get a dictionary of ".h5" file path names
-    path_file: dict[int, str] = dict(
+    path_file = dict(
         (index, path)  # Get both the h5 file path and index...
         for index, path  # ... for all h5 file paths and indices...
         in enumerate(sorted(glob(path_dir + '*.h5')))  # ... in the directory..
@@ -104,48 +105,13 @@ def dict_to_df(
     return path_df
 
 
-def get_labview_ccd_groups(
-        hdf5_group_instrument: h5py._hl.dataset.Dataset,
-) -> h5py._hl.dataset.Dataset:
-    """
-    Access and store HDF5 Group 'labview_data' and 'detector_1' under the
-    path /entry1/instrument_1/
-
-    i.e., hdf5_group_instrument from the statement below:
-        with h5py.file(<file name>, 'r') as h5_file:
-            hdf5_group_statement = h5_file
-
-    PARAMETERS
-    -----
-    hdf5_group: h5py._hl.dataset.Dataset
-        A HDF5 file object
-
-    index: int
-        Index of the image within an image stack in the HDF5 file
-
-    correction: str
-        Type of intensity correction to perform on the CCD image 'ccd_image'
-            - Nothing : Return the raw ccd image
-            - 'i0 norm' : Normalize ccd image by the right blade current
-            - 'cps' : Normalize ccd image by acquisition time (counts per sec)
-
-    RETURNS
-    -----
-    ccd_image: np.ndarray
-        A M x N image
-
-    TODO: Finish writing this up you dingus!
-    """
-    return None
-
-
-def get_single_ccd_image(
+def read_image_from_h5(
         dataset: h5py._hl.dataset.Dataset,
         index: int,
         correction: str = ''
 ) -> np.ndarray:
     """
-    Get a CCD image contained in a HDF5 dataset of interest with optional
+    Reads CCD image(s) contained in a HDF5 dataset of interest with optional
     normalization of the image
     
     PARAMETERS
@@ -167,7 +133,7 @@ def get_single_ccd_image(
     RETURNS
     -----
     ccd_image: np.ndarray
-        A M x N image
+        A v x M x N image
 
     TODO: Change the normalization factor for the diode, they're negative!
           Plus, the number of labview datapoints is not the same as the ccd
@@ -185,7 +151,7 @@ def get_single_ccd_image(
         norm_factor = h5_labview_db['XS111LeftBladecurrent_diode'][index]
     elif 'i0 rlrl' in correction:  # XS111 RLRL diode normalization
         print(h5_labview_db['XS111RLRL_diode'].shape)
-        norm_factor = -h5_labview_db['XS111RLRL_diode'][index]
+        norm_factor = np.abs(h5_labview_db['XS111RLRL_diode'][index])
         print(norm_factor)
     elif 'cps' in correction:  # Convert intensity to counts-per-second
         norm_factor = h5_labview_db['count_time'][index] / 1000
@@ -198,7 +164,7 @@ def get_single_ccd_image(
     return ccd_image / norm_factor
 
 
-def store_h5_ccd_image(
+def load_h5_image(
         path_file: str,
         correction: str = ''
 ) -> np.ndarray:
@@ -232,25 +198,12 @@ def store_h5_ccd_image(
         h5_ccd_db = h5_inst_db['detector_1']['data']
         h5_labview_db = h5_inst_db['labview_data']
 
-        # Generate numpy array to store the CCD images
-        number_images = h5_ccd_db.shape[1]  # Number of images in the stack
-        number_pixels = h5_ccd_db.shape[2]  # Number of pixels in row/col
-        ccd_image = np.empty([number_images, number_pixels, number_pixels])
-
-        # Iterate through all the individual images in the stack
-        """
-        for index in range(number_images):
-            # Get the image
-            ccd_image[index] = get_single_ccd_image(h5_inst_db,
-                                                    index,
-                                                    correction)
-                                                    """
-
-        p = get_single_ccd_image(h5_inst_db, 0, correction)
-    return p
+        # Get the ccd_image stack
+        ccd_image = read_image_from_h5(h5_inst_db, 0, correction)
+    return ccd_image
 
 
-def group_files_in_dir(
+def get_file_groups(
         path_dir: str,
         *,
         key_common: str | tuple[str],
@@ -300,8 +253,8 @@ def group_files_in_dir(
 
         RETURNS
         -----
-        (file_properties, unique_positions, file_group): tuple
-            file_properties: pd.DataFrame
+        (file_list, unique_positions, file_group): tuple
+            file_df: pd.DataFrame
                 Data frame with list of path names along with their associated
                 key_common and key_variable position values
             unique_positions: pd.DataFrame
@@ -310,9 +263,9 @@ def group_files_in_dir(
                 EACH ROW IN UNIQUE_POSITION REPRESENTS PARAMETERS SHARED
                 BY A FILE GROUP
             file_group: list[pd.Series] (dtype boolean)
-                Indicates which rows in file_properties belong to a file_group
+                Indicates which rows in file_df belong to a file_group
                 (i.e., a row in unique_positions)
-                For instance, file_properties[file_group[0]] will pull all
+                For instance, file_df[file_group[0]] will pull all
                 the files which possesses position value combinations in
                 unique_positions.loc[[0]]
     """
@@ -323,7 +276,7 @@ def group_files_in_dir(
     file_paths = get_all_file_names(path_dir, search=search, verbose=verbose)
 
     # Convert file_paths into a Pandas DataFrame
-    file_properties = dict_to_df(file_paths, value_title='path', verbose=verbose)
+    file_df = dict_to_df(file_paths, value_title='path', verbose=verbose)
 
     # Check if keys_common and/or key_variable are tuples or str.
     # If they are strings, then convert them to tuples.
@@ -333,23 +286,23 @@ def group_files_in_dir(
     if isinstance(key_variable, str):
         key_variable = (key_variable,)
 
-    # Create empty columns in file_properties to later fill with labview
+    # Create empty columns in file_df to later fill with labview
     # data associated with each file path
     for entry in key_common + key_variable:
-        file_properties[entry] = pd.Series(dtype='float')
+        file_df[entry] = pd.Series(dtype='float')
 
-    # Populate file_properties with the desired labview data (keys_common
+    # Populate file_df with the desired labview data (keys_common
     # and keys_different)
-    for idx in file_properties.index:
+    for idx in file_df.index:
         # Open one h5 file at a time
         with h5py.File(file_paths[idx], 'r') as h5_file:
             # Iterate over all the keys_common and keys_different entries
             for entry in key_common + key_variable:
-                file_properties.at[idx, entry] = round(h5_file['entry1']
-                                                       ['instrument_1']
-                                                       ['labview_data']
-                                                       [entry]
-                                                       [0], 2)
+                file_df.at[idx, entry] = round(h5_file['entry1']
+                                               ['instrument_1']
+                                               ['labview_data']
+                                               [entry]
+                                               [0], 2)
 
     # Get a smaller dataframe with lists the unique combination of key_common
     # position values (not the name of the key, but the value associated with
@@ -357,11 +310,12 @@ def group_files_in_dir(
     # number of file group members, which is also the number of key_variable
     # files within the file group)
     unique_positions = \
-        file_properties.groupby(
-            list(key_common)).size().reset_index().rename(columns={0:'counts'})
+        file_df.groupby(
+            list(key_common)).size().reset_index().rename(
+            columns={0: 'counts'})
 
     # Generate a 1 x N list of Pandas series (dtype boolean, 1 x M) which can
-    # be used to pull select parts of file_properties (M) based on a desired
+    # be used to pull select parts of file_df (M) based on a desired
     # set of unique_position values (N)
 
     # First, generate a L x N list of series booleans which come from logical
@@ -369,8 +323,8 @@ def group_files_in_dir(
     # and their associated position values (N)
     # len(equal_table) = # of key_common values (L)
     # len(equal_table[0]) = # of unique_positions (N)
-    # len(equal_table[0][0]) = # of individual files in file_properties
-    equal_table = [[file_properties[col_name] == value for value in
+    # len(equal_table[0][0]) = # of individual files in file_df
+    equal_table = [[file_df[col_name] == value for value in
                     unique_positions[col_name]] for col_name in key_common]
 
     # Reduce the table into a 1 X N list
@@ -383,18 +337,22 @@ def group_files_in_dir(
                       for count, compare_value in enumerate(compare_list)]
 
     # K, we're dun
-    return file_properties, unique_positions, file_group
+    return file_df, unique_positions, file_group
 
 
-def batch_file_processing(
+def batch_processing_dichroism(
         path_dir: str,
         *,
-        keys_common: str | tuple[str],
-        key_variable: str | tuple[str],
+        key_common: str | tuple[str],
+        key_variable: str,
         search: str = '',
+        mode: str = 'difference',
         correction: str = '',
-        verbose: bool = True,
+        variable_stack: bool = False,
+        verbose: bool = False,
         diagnostic: bool = False,
+        save_data: bool = True,
+        save_figure: bool = False
 ) -> None:
     """
     TODO:
@@ -461,120 +419,155 @@ def batch_file_processing(
 
     diagnostic: bool
         Similar to verbose, but displays some additional pandas dataframes.
-        Namely, file_properties and unique_det_positions
+        Namely, file_df and unique_det_positions
 
     RETURNS
     -----
     Nothing yet
 
     """
-    # This is used to visualize all the entries within a pandas dataframe
-    pd.set_option('display.max_colwidth', 0)
 
-    # Grab all the file names in the directory and put them in a dict
-    file_paths = get_all_file_names(path_dir,
-                                    search=search,
-                                    verbose=True)
+    # Define static variables to identify polarization states
+    POL_CIR = (-1, 1)
+    POL_LIN = (0, 2)
 
-    # Convert file_paths into a Pandas DataFrame
-    file_properties = pd.DataFrame(file_paths, index=[0]).T
+    # Define a private function to handle saving data
+    def data_saver(path_name,
+                   im_dichro,
+                   im_pol_a,
+                   im_pol_b,
+                   metadata_pol_a,
+                   metadata_pol_b
+                   ) -> None:
+        # Writes the processed data to an HDF5 file
+        with h5py.File(path_name, 'w') as hf:
+            # Create different groups for the dichroism image and the
+            # corresponding polarization images
+            g_process = hf.create_group('process')
+            g_pol_a = hf.create_group('pol_a')
+            g_pol_b = hf.create_group('pol_b')
 
-    # Change the '0' column name to 'path'
-    file_properties.rename(columns={0: 'path'}, inplace=True)
+            # Save the images
+            g_process.create_dataset('image_dichro', data=im_dichro)
+            g_pol_a.create_dataset('image', data=im_pol_a)
+            g_pol_b.create_dataset('image', data=im_pol_b)
 
-    # Check if keys_common and keys_different are tuples or str.
-    # If they are strings, then convert them to tuples. This is for a future
-    # feature I'd like to implement to allow for multiple strings to be
-    # used in this function
-    if isinstance(keys_common, str):
-        keys_common = (keys_common,)
-    if isinstance(keys_different, str):
-        keys_different = (keys_different,)
+            # Save the metadata.
+            for entry_name in metadata_pol_a.columns[:]:
+                g_pol_a.create_dataset(entry_name,
+                                       data=metadata_pol_a[entry_name].iloc[0])
 
-    # Throw a not implemented error if a tuple with more than 1 element is used
-    if len(keys_common) > 1 or len(keys_different) > 1:
-        raise NotImplementedError(
-            "Please only enter one key for keys_common and keys_different")
+            for entry_name in metadata_pol_b.columns[:]:
+                g_pol_b.create_dataset(entry_name,
+                                       data=metadata_pol_b[entry_name].iloc[0])
 
-    # Create empty columns in file_properties to later fill with labview
-    # data associated with each file path
-    for entry in keys_common + keys_different:
-        file_properties[entry] = pd.Series(dtype='float')
+            # Save image processing parameters
+            g_process.create_dataset('correction', data=correction)
+            g_process.create_dataset('dichroism_calculation', data=mode)
 
-    # Populate file_properties with the desired labview data (keys_common
-    # and keys_different)
-    for idx in file_properties.index:
-        # Open one h5 file at a time
-        with h5py.File(file_paths[idx], 'r') as h5_file:
-            # Iterate over all the keys_common and keys_different
-            # entries
-            for entry in keys_common + keys_different:
-                file_properties.at[idx, entry] = round(h5_file['entry1']
-                                                       ['instrument_1']
-                                                       ['labview_data']
-                                                       [entry]
-                                                       [0], 2)
+    # Define a private function to handle file name generation from metadata.
+    # The file name will exclude the key_variable from the name
+    def file_name_generator(prefix, f_df) -> str:
+        # Generate name for dichroism data file
+        col_names = f_df.columns[1:-1]
+        temp_file_name = prefix + ''.join(
+            f'_{idx_name}_{f_df[idx_name].iloc[0]}' for
+            idx_name in col_names).replace('.', 'p') + '.h5'
+        return os.path.join(path_dir, temp_file_name)
 
-    # Get a smaller dataframe which lists the unique combinations of
-    # keys_common and keys_different in file_properties. The column
-    # 'counts' here represents the number of times this unique combination of
-    # HDF5 keys are observed across the data files in file_properties.
-    unique_det_positions = file_properties.groupby(
-        list(keys_common + keys_different)).size().reset_index().rename(
-        columns={0: 'counts'})
+    # Use group_files_in_dir to determine what groups of files to perform
+    # batch processing on
+    file_df, unique_positions, file_group = \
+        get_file_groups(path_dir,
+                        key_common=key_common,
+                        key_variable=key_variable,
+                        search=search,
+                        verbose=diagnostic)
 
-    # Get rid of any entries in unique_2Theta_Det_translate which have counts
-    # less than or equal to 1 since we need 2 images with different
-    # polarizations to do dichroism calculations
-    unique_det_positions = unique_det_positions.drop(
-        unique_det_positions.loc[unique_det_positions['counts'] <= 1].index)
-
-    # Displays unique_det_positions if diagnostic is enabled
+    # Display files_df and unique_positions if diagnostic is True
     if diagnostic:
-        print('-------------------------------------\nunique_det_positions')
-        display(unique_det_positions)
+        print('------------------file_df------------------\n')
+        display(file_df)
+        print('\n------------------unique_positions------------------\n')
+        display(unique_positions)
         print('\n-------------------------------------\n')
 
-    ### At this point, unique_det_positions contains all the unique tth and det_translate positions
-    ### which we can use to pull up the two CCD files we need for dichroism calculation
+    # Look at each file group one at a time and perform dichroism calculations
+    for idx, position_values in enumerate(unique_positions):
+        # Pull out the dataframe containing all members of the file group
+        file_group_df = file_df[file_group[idx]]
 
-    # Iterate through all the entries in unique_det_positions.
-    for idx in unique_det_positions.index.values:
-        # Store the current tth and det_translate values we're looking at in variables
-        current_tth = unique_det_positions.loc[idx]['tth']
-        current_det_translate = unique_det_positions.loc[idx]['det translate']
+        # Determine if this file group is suitable to calculate dichroism
+        file_LCP = file_group_df[file_group_df[key_variable] == POL_CIR[0]]
+        file_RCP = file_group_df[file_group_df[key_variable] == POL_CIR[1]]
+        file_HLP = file_group_df[file_group_df[key_variable] == POL_LIN[0]]
+        file_VLP = file_group_df[file_group_df[key_variable] == POL_LIN[1]]
 
-        # Pull out the files which have the correct tth and det translate values
-        file_set = file_properties.loc[
-            (file_properties['tth'] == current_tth) &
-            (file_properties['det translate'] == current_det_translate)]
+        # Dichroism calculation can only be performed if each opposite
+        # polarization has only 1 image
+        if len(file_LCP) * len(file_RCP) == 1:
+            # Calculate dichroism image
+            im_XCD, im_RCP, im_LCP = \
+                dp.calculate_dichroism_from_file(file_RCP['path'].values[0],
+                                                 file_LCP['path'].values[0],
+                                                 mode=mode,
+                                                 correction=correction,
+                                                 variable_stack=variable_stack)
 
-        # Pull out the files which have the 2 desired polarization states
-        """
-        idx_state_1 = file_set.loc[
-            file_properties['polarization'] == POLARIZATION_STATE[
-                0]].index.values
-        idx_state_2 = file_set.loc[
-            file_properties['polarization'] == POLARIZATION_STATE[
-                1]].index.values
-        """
+            # Generate name for dichroism data file
+            save_path = file_name_generator('processed_XCD', file_RCP)
 
-        # Only perform subsequent calculations if both file_state_* have exactly one entry
-        """
-        if idx_state_1.shape[0] == 1 and idx_state_2.shape[0] == 1:
-
-            # If verbose is enabled, print out the dataframe
+            # If verbose, display file_LCP and file_RCP
             if verbose:
-                print('\n')
-                display(
-                    file_set.loc[np.concatenate((idx_state_1, idx_state_2))])
+                display(file_group_df[np.abs(file_group_df[key_variable])==1])
 
-            # Pull out the image file paths from the dataframe
-            file_path_1 = file_set.loc[idx_state_1]['file path'].values[0]
-            file_path_2 = file_set.loc[idx_state_2]['file path'].values[0]
-            ccd_state_1 = get_h5_ccd_image(file_path_1, correction)
-            ccd_state_2 = get_h5_ccd_image(file_path_2, correction)
-        """
+            # Plot the dichroism data
+            plt.plot_three_images_dichroism(im_RCP, im_LCP, im_XCD,
+                                            title_main=save_path,
+                                            title_1='RCP',
+                                            title_2='LCP',
+                                            title_3='XCD')
+
+            if save_data:
+                print('Saving data to: ' + save_path)
+                # Save the dichroism data
+                data_saver(save_path, im_XCD, im_RCP, im_LCP, file_RCP,
+                           file_LCP)
+                print('\nData saved')
+                print('\n-------------------------------------\n')
+
+        if len(file_HLP) * len(file_VLP) == 1:
+            # Calculate dichroism image
+            im_XLD, im_HLP, im_VLP = \
+                dp.calculate_dichroism_from_file(file_HLP['path'].values[0],
+                                                 file_VLP['path'].values[0],
+                                                 mode=mode,
+                                                 correction=correction,
+                                                 variable_stack=variable_stack)
+
+            # Generate name for dichroism data file
+            save_path = file_name_generator('processed_XLD', file_HLP)
+
+            # If verbose, display file_HLP and file_VLP
+            if verbose:
+                display(file_group_df[
+                            (file_group_df[key_variable] == POL_LIN[0]) |
+                            (file_group_df[key_variable] == POL_LIN[1])])
+
+            # Plot the dichroism data
+            plt.plot_three_images_dichroism(im_HLP, im_VLP, im_XLD,
+                                            title_main=save_path,
+                                            title_1='HLP',
+                                            title_2='VLP',
+                                            title_3='XLD')
+
+            if save_data:
+                print('Saving data to: ' + save_path)
+                # Save the dichroism data
+                data_saver(save_path, im_XCD, im_RCP, im_LCP, file_RCP,
+                           file_LCP)
+                print('\nData saved')
+                print('\n-------------------------------------\n')
+
     # Let user know the function is done
     print('Function is done. D-U-N')
-    return file_properties

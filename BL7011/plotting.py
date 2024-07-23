@@ -38,11 +38,18 @@ def plot_image(
     axarr.set_title(title)
 
     # Show the images
+    """
     im = axarr.imshow(image,
                       cmap='viridis',
                       origin='lower',
                       norm=LogNorm(vmin=np.percentile(image, 5),
                                       vmax=np.percentile(image, 95)))
+    """
+    im = axarr.imshow(image,
+                      cmap='viridis',
+                      origin='lower',
+                      vmin=np.percentile(image, 5),
+                      vmax=np.percentile(image, 95))
 
     fig.colorbar(im, ax=axarr)
     plt.draw()
@@ -114,8 +121,6 @@ def plot_three_images_dichroism(
     # Set the color limit of the image
     image_3_climit = max(intensity_max, intensity_min)
 
-    print(np.percentile(image_1, 5))
-    print(np.percentile(image_1, 95))
     # Show the images
     im1 = axarr[0].imshow(image_1,
                           cmap='viridis',

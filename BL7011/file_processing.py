@@ -37,7 +37,7 @@ def get_all_file_names(
         those file names which contain the specified string.
     verbose: bool
         If set to True, the function will print out the names of each file
-        along  with its associated index in the dictionary. By default this is
+        along  with its associated index in the dictionary. By default, this is
         set to True.
 
     RETURNS
@@ -195,8 +195,6 @@ def load_h5_image(
     with h5py.File(path_file, 'r') as h5_file:
         # Define the h5 database with the ccd image stack and the labview data
         h5_inst_db = h5_file['entry1']['instrument_1']
-        h5_ccd_db = h5_inst_db['detector_1']['data']
-        h5_labview_db = h5_inst_db['labview_data']
 
         # Get the ccd_image stack
         ccd_image = read_image_from_h5(h5_inst_db, 0, correction)
@@ -210,7 +208,7 @@ def get_file_groups(
         key_variable: str,
         search: str = '',
         verbose: bool = False
-) -> tuple[pd.DataFrame, pd.DataFrame, list[pd.Series]]:
+) -> tuple[pd.DataFrame, pd.DataFrame, list[bool]]:
     """
         Looks at all HDF5 CCD files within a directory and identifies
         determines groups of files ("file groups") which share desired 
@@ -333,7 +331,7 @@ def get_file_groups(
     # Perform logical operation across the key_common values (N) for each
     # unique_position (M)
     for compare_list in equal_table:
-        file_group = [file_group[count] & compare_value \
+        file_group = [file_group[count] & compare_value
                       for count, compare_value in enumerate(compare_list)]
 
     # K, we're dun
@@ -355,16 +353,6 @@ def batch_processing_dichroism(
         save_figure: bool = False
 ) -> None:
     """
-    TODO:
-    - Make sure that the different indices associated with the file grabbing
-    doesn't screw up the operation of the code
-    - Make certain parts (i.e., pair processing) their own dedicated functions
-    - Ability to save result data
-    - Make this a decorator factory?
-    - Give the user the ability to define multiple keys for keys_common
-        and keys_different
-    - Change this into a different function called file_grouper
-
     Performs batch processing of all COSMIC Scattering data files within a
     specified directory.
 
@@ -395,13 +383,13 @@ def batch_processing_dichroism(
     PARAMETERS
     -----
     path_dir: str
-        The pathname of the directory (i.e., folder) which contains the h5 data
+        Pathname of the directory (i.e., folder) which contains the h5 files
 
-    keys_common: str or tuple[str]
+    key_common: str or tuple[str]
         HDF5 keys/Labview entries which are common to a group of data files.
 
-    keys_different: str or tuple[str]
-        HDF5 keys/Labview entries which are different across the entire
+    key_variable: str or tuple[str]
+        HDF5 keys/Labview entry which is different across the entire
         collection of data files to be examined.
 
     search: str
@@ -409,21 +397,46 @@ def batch_processing_dichroism(
         file names. Specifying "search" will cause the function to only return
         those file names which contain the specified string.
 
-    save_file: bool
-        If enabled, will
+    mode: str
+        The type of dichroism calculation to perform
+        - 'difference': Calculates image as (image_pol_A - image_pol_B)
+        - 'asymmetry': Calculates image as
+                      (image_pol_A - image_pol_B) / (image_pol_A + image_pol_B)
+
+    correction: str
+        Type of intensity correction to perform on the CCD image 'ccd_image'
+            - Nothing : Return the raw ccd image
+            - 'i0 blade' : Normalize ccd image by the right blade current
+            - 'i0 RLRL' : Normalized by the XS111 RLRL diode (what is this?)
+            - 'cps' : Normalize ccd image by acquisition time (counts per sec)
+
+    variable_stack: bool
+        Setting this to False will make the function calculate an average
+        of an image stack (i.e., each frame in the stack represents multiple
+        "redundant" camera exposure and do not have any parameters varying)
 
     verbose: bool
         If set to True, the function will print out a list of the acquired file
         paths along with the associated polarization, 2theta, and detector
-        position values. By default this is set to True.
+        position values. By default this is set to True
 
     diagnostic: bool
         Similar to verbose, but displays some additional pandas dataframes.
         Namely, file_df and unique_det_positions
 
+    save_data: bool
+        Saves the processed data. Data files will automatically have a name
+        generated based on the "key_common" and "key_variable" names and values
+        they possess
+
+    save_figure: bool
+        Saves the matplotlib figures generated during batch processing. Files
+        will automatically have a name generated based on the "keys_common" and
+        "key_variable" name and values they possess
+
     RETURNS
     -----
-    Nothing yet
+    Nothing
 
     """
 
@@ -519,7 +532,8 @@ def batch_processing_dichroism(
 
             # If verbose, display file_LCP and file_RCP
             if verbose:
-                display(file_group_df[np.abs(file_group_df[key_variable])==1])
+                display(file_group_df[np.abs(
+                    file_group_df[key_variable]) == 1])
 
             # Plot the dichroism data
             plt.plot_three_images_dichroism(im_RCP, im_LCP, im_XCD,
@@ -564,8 +578,8 @@ def batch_processing_dichroism(
             if save_data:
                 print('Saving data to: ' + save_path)
                 # Save the dichroism data
-                data_saver(save_path, im_XCD, im_RCP, im_LCP, file_RCP,
-                           file_LCP)
+                data_saver(save_path, im_XLD, im_HLP, im_VLP, file_HLP,
+                           file_VLP)
                 print('\nData saved')
                 print('\n-------------------------------------\n')
 

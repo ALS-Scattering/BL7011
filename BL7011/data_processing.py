@@ -13,6 +13,7 @@
 import numpy as np
 from BL7011 import file_processing as fp
 
+
 def calculate_dichroism(
         image_pol_a: np.ndarray,
         image_pol_b: np.ndarray,

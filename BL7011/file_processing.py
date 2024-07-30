@@ -535,20 +535,29 @@ def batch_processing_dichroism(
                 display(file_group_df[np.abs(
                     file_group_df[key_variable]) == 1])
 
-            # Plot the dichroism data
-            plt.plot_three_images_dichroism(im_RCP, im_LCP, im_XCD,
-                                            title_main=save_path,
-                                            title_1='RCP',
-                                            title_2='LCP',
-                                            title_3='XCD')
-
             if save_data:
                 print('Saving data to: ' + save_path)
                 # Save the dichroism data
                 data_saver(save_path, im_XCD, im_RCP, im_LCP, file_RCP,
                            file_LCP)
-                print('\nData saved')
-                print('\n-------------------------------------\n')
+
+            # Initialize the a string to store the image save path as None
+            save_path_im = None
+
+            # Redefine save_path_im as a file path if save_figure is True
+            if save_figure:
+                save_path_im = save_path[0:-2] + 'png'
+                print('Saving image to: ' + save_path_im)
+
+            # Plot the dichroism data
+            plt.plot_three_images_dichroism(im_RCP, im_LCP, im_XCD,
+                                            title_main=save_path,
+                                            title_1='RCP',
+                                            title_2='LCP',
+                                            title_3='XCD',
+                                            save_path=save_path_im)
+
+            print('\n-------------------------------------\n')
 
         if len(file_HLP) * len(file_VLP) == 1:
             # Calculate dichroism image
@@ -568,20 +577,29 @@ def batch_processing_dichroism(
                             (file_group_df[key_variable] == POL_LIN[0]) |
                             (file_group_df[key_variable] == POL_LIN[1])])
 
-            # Plot the dichroism data
-            plt.plot_three_images_dichroism(im_HLP, im_VLP, im_XLD,
-                                            title_main=save_path,
-                                            title_1='HLP',
-                                            title_2='VLP',
-                                            title_3='XLD')
-
             if save_data:
                 print('Saving data to: ' + save_path)
                 # Save the dichroism data
                 data_saver(save_path, im_XLD, im_HLP, im_VLP, file_HLP,
                            file_VLP)
-                print('\nData saved')
-                print('\n-------------------------------------\n')
+
+            # Initialize the a string to store the image save path as None
+            save_path_im = None
+
+            # Redefine save_path_im as a file path if save_figure is True
+            if save_figure:
+                save_path_im = save_path[0:-2] + 'png'
+                print('Saving image to: ' + save_path_im)
+
+            # Plot the dichroism data
+            plt.plot_three_images_dichroism(im_HLP, im_VLP, im_XLD,
+                                            title_main=save_path,
+                                            title_1='HLP',
+                                            title_2='VLP',
+                                            title_3='XLD',
+                                            save_path=save_path_im)
+
+            print('\n-------------------------------------\n')
 
     # Let user know the function is done
     print('Function is done. D-U-N')

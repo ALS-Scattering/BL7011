@@ -14,7 +14,7 @@ import pandas as pd
 import h5py
 from IPython.display import display
 from BL7011 import data_processing as dp
-from BL7011 import plotting as plt
+from BL7011 import plotting as pt
 
 
 def get_all_file_names(
@@ -550,7 +550,7 @@ def batch_processing_dichroism(
                 print('Saving image to: ' + save_path_im)
 
             # Plot the dichroism data
-            plt.plot_three_images_dichroism(im_RCP, im_LCP, im_XCD,
+            pt.plot_three_images_dichroism(im_RCP, im_LCP, im_XCD,
                                             title_main=save_path,
                                             title_1='RCP',
                                             title_2='LCP',
@@ -592,7 +592,7 @@ def batch_processing_dichroism(
                 print('Saving image to: ' + save_path_im)
 
             # Plot the dichroism data
-            plt.plot_three_images_dichroism(im_HLP, im_VLP, im_XLD,
+            pt.plot_three_images_dichroism(im_HLP, im_VLP, im_XLD,
                                             title_main=save_path,
                                             title_1='HLP',
                                             title_2='VLP',

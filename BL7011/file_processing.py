@@ -9,7 +9,6 @@
 import numpy as np
 from glob import glob
 from os.path import basename
-import nexusformat.nexus
 import pandas as pd
 import h5py
 
@@ -181,6 +180,10 @@ def store_h5_ccd_image(
     -----
     ccd_image: np.ndarray
         The CCD image, contained within an v x M x N array
+
+    TODO: There seems to be a bug, where if you try reading one measurement
+        with multiple frames, it cannot be stored in the method described from
+        lines 196-205
     """
     # Open the h5 file of interest
     with h5py.File(path_file, 'r') as h5_file:
@@ -190,16 +193,55 @@ def store_h5_ccd_image(
         h5_labview_db = h5_inst_db['labview_data']
 
         # Generate numpy array to store the CCD images
-        number_images = h5_ccd_db.shape[0]  # Number of images in the stack
+        number_image_sets = h5_ccd_db.shape[0]  # Number of image sets in the stack
         number_pixels = h5_ccd_db.shape[2]  # Number of pixels in row/col
-        ccd_image = np.empty([number_images, number_pixels, number_pixels])
+        ccd_image = np.empty([number_image_sets, number_pixels, number_pixels])
 
         # Iterate through all the individual images in the stack
-        for index in range(number_images):
+        for index in range(number_image_sets):
             # Get the image
             ccd_image[index] = get_single_ccd_image(h5_inst_db, index, correction)
 
     return ccd_image
+
+def store_h5_ccd_image_single_measurement(
+        path_file: str,
+        correction: str = ''
+) -> np.ndarray:
+    """
+    Reads the CCD image contained in a h5 file of interest
+
+    If an image stack with "v" images is fed into this function, the function
+    will perform calculations on the individual images
+
+    PARAMETERS
+    -----
+    path_file: str
+        The pathname of the h5 file
+
+    correction: str
+        Type of intensity correction to perform on the CCD image 'ccd_image'
+            - Nothing : Return the raw ccd image
+            - 'i0 blade' : Normalize ccd image by the right blade current
+            - 'i0 RLRL' : Normalized by the XS111 RLRL diode (what is this?)
+            - 'cps' : Normalize ccd image by acquisition time (counts per sec)
+
+    RETURNS
+    -----
+    ccd_image: np.ndarray
+        The CCD image, contained within an v x M x N array
+
+    TODO: This is just a temporary function for dealing with the todo issue
+        in store_h5_ccd_image so I can process some data for the multilayer
+        experiment
+    """
+    # Open the h5 file of interest
+    with h5py.File(path_file, 'r') as h5_file:
+        # Define the h5 database with the ccd image stack and the labview data
+        h5_inst_db = h5_file['entry1']['instrument_1']
+        h5_ccd_db = h5_inst_db['detector_1']['data']
+        h5_labview_db = h5_inst_db['labview_data']
+        return get_single_ccd_image(h5_inst_db, index, correction)
 
 def batch_file_processing(
         path_dir: str,

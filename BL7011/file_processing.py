@@ -156,18 +156,30 @@ def get_single_ccd_image(
 
 def store_h5_ccd_image(
         path_file: str,
+        average_images: bool = True,
         correction: str = ''
 ) -> np.ndarray:
     """
-    Reads the CCD image contained in a h5 file of interest
+    Reads the CCD image(s) contained in a h5 file of interest and perform
+    optional pre-processing.
 
-    If an image stack with "v" images is fed into this function, the function
-    will perform calculations on the individual images
+    Depending on the chosen mode and number of images in the data set,
+    either a KxLxMxN or LxMxN sized numpy array will be returned, where
+    KxLxMxN corresponds with the dimensions of the data in the h5 file
+    and corresponds with the image dimension (MxN), number of experimental
+    states (K), and the number of images taken at each experimental state (L).
+
+    An experimental state refers to measurements taken with fixed experimental
+    parameters (e.g., temperature, motor positions, etc)
 
     PARAMETERS
     -----
     path_file: str
         The pathname of the h5 file
+
+    average_images: bool
+        Averages all the images taken for each experimental state (i.e.,
+        averages all "L" images taken for each "K")
 
     correction: str
         Type of intensity correction to perform on the CCD image 'ccd_image'
@@ -193,16 +205,31 @@ def store_h5_ccd_image(
         h5_labview_db = h5_inst_db['labview_data']
 
         # Generate numpy array to store the CCD images
-        number_image_sets = h5_ccd_db.shape[0]  # Number of image sets in the stack
-        number_pixels = h5_ccd_db.shape[2]  # Number of pixels in row/col
-        ccd_image = np.empty([number_image_sets, number_pixels, number_pixels])
+        # First, get the shape of the data set
+        # For data_shape, we're assuming that it's structured so that
+        # data_shape[0] = K =# of experimental states
+        # data_shape[1] = L = # of images captured at each state
+        # data_shape[2,3] = MxN = Size of image frame
+        data_shape = h5_ccd_db.shape
+
+        # Depending on if average_image was selected, store the image set
+        if average_images:
+            # Make an empty array (don't load everything in h5_ccd_db to RAM)
+            im_ccd = np.empty([data_shape[0], data_shape[2], data_shape[3]])
+
+            # Loop over all the experimental states and average the images
+            for i in range(data_shape[0]):
+                im_ccd[i] = np.mean(h5_ccd_db[i], axis=0)
+
+        else:
+            im_ccd = h5_ccd_db[:]
 
         # Iterate through all the individual images in the stack
-        for index in range(number_image_sets):
-            # Get the image
-            ccd_image[index] = get_single_ccd_image(h5_inst_db, index, correction)
+        #for i in range(data_shape[0]):
+        #    # Get the image
+        #    im_ccd[i] = get_single_ccd_image(h5_inst_db, i, correction)
 
-    return ccd_image
+    return im_ccd
 
 def store_h5_ccd_image_single_measurement(
         path_file: str,
@@ -241,7 +268,7 @@ def store_h5_ccd_image_single_measurement(
         h5_inst_db = h5_file['entry1']['instrument_1']
         h5_ccd_db = h5_inst_db['detector_1']['data']
         h5_labview_db = h5_inst_db['labview_data']
-        return get_single_ccd_image(h5_inst_db, index, correction)
+        return get_single_ccd_image(h5_inst_db, 0, correction)
 
 def batch_file_processing(
         path_dir: str,

@@ -66,8 +66,8 @@ def calculate_dichroism(
 
 def align_detector_images(im_ref: str,
                           im_move: str,
-                          dataset_ref: h5py._hl.dataset.Dataset,
-                          dataset_move: h5py._hl.dataset.Dataset) -> np.ndarray:
+                          path_ref: str,
+                          path_move: str) -> np.ndarray:
     """
     Aligns pairs of detector images given their respective detector translate
      and 2theta values stored in the 'instrument_1' dataset of the original
@@ -77,9 +77,9 @@ def align_detector_images(im_ref: str,
     ----------
     im_ref: The reference image with size M x N
     im_move: The image that will be aligned to im_ref, with size M x N
-    dataset_ref: The HDF5 dataset associated with im_ref
+    path_ref: The path to the HDF5 dataset associated with im_ref
         (i.e., h5_file['entry1']['instrument_1')
-    dataset_move: The HDF5 dataset associated with im_move
+    path_move: The patht o the HDF5 dataset associated with im_move
 
     Returns
     -------
@@ -87,35 +87,45 @@ def align_detector_images(im_ref: str,
 
     TODO: Implement theta, sample translate, and sample lift at some point
     """
+
+    # Define a function to grab the different datasets from the HDF5 file
+    def metadata_grabber(path:str) -> dict:
+        # First, define an empty dictionary
+        metadata = {}
+
+        # Open up the h5 file and store the datasets in 'metadata'
+        with h5py.File(path, 'r') as file:
+            metadata['det_translate'] = file['labview_data']['det_translate'][()]
+            metadata['detector_rotate'] = file['labview_data']['detector_rotate'][()]
+            metadata['detector_distance'] = file['detector_1']['distance'][()]
+            metadata['x_pixel_size'] = file['detector_1']['x_pixel_size'][()]
+            metadata['y_pixel_size'] = ['detector_1']['y_pixel_size'][()]
+
+        return metadata
+
     # Pull out the detector translate and 2theta positions
-    det_translate_ref = dataset_ref['labview_data']['det_translate'][()]
-    tth_ref = dataset_ref['labview_data']['detector_rotate'][()]
-
-    det_translate_move = dataset_move['labview_data']['det_translate'][()]
-    tth_move = dataset_move['labview_data']['detector_rotate'][()]
-
-    # Grab the sample-detector distance and pixel size
-    sample_detector_distance = dataset_ref['detector_1']['distance'][()]
-    pixel_size = dataset_ref['detector_1']['x_pixel_size'][()]
+    md_ref = metadata_grabber(path_ref)
+    md_move = metadata_grabber(path_move)
 
     # We assume here that the x and y pixel sizes are identical... complain
     # if they are not.
-    if pixel_size != dataset_ref['detector_1']['y_pixel_size'][()]:
+    if md_ref['x_pixel_size'] != md_ref['y_pixel_size']:
         raise ValueError('The x- and y-pixel sizes are not identical.')
 
     # Check that the parameters are consistent between the two images...
     # complain if they are not.
-    if not ((sample_detector_distance != dataset_move['detector_1']['distance'][()])
-            or (pixel_size != dataset_ref['detector_1']['y_pixel_size'][()])):
-
+    if not ((md_ref['detector_distance'] != md_move['detector_distance'])
+            or (md_ref['x_pixel_size'] != md_move['x_pixel_size'])):
 
         raise ValueError('Alignment cannot be performed between images with'
                          'two different sample-detector distances or pixel '
                          'sizes.')
 
     # Calculate the pixel shift needed to align the two images
-    shift_translate = np.round((det_translate_move - det_translate_ref) / pixel_size)
-    shift_tth = np.round((sample_detector_distance * (np.sin(tth_move) - np.sin(tth_ref))) / pixel_size)
+    shift_translate = np.round((md_move['det_translate'] - md_ref['det_translate']) / md_ref['x_pixel_size'])
+    shift_tth = np.round((md_ref['detector_distance'] *
+                         (np.sin(md_move['detector_rotate']) - np.sin(md_ref['detector_rotate'])))
+                         / md_ref['x_pixel_size'])
 
     # Apply the shift to the image
     return ndi.shift(im_move, (shift_tth,shift_translate))

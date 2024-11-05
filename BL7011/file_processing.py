@@ -157,7 +157,8 @@ def get_single_ccd_image(
 def store_h5_ccd_image(
         path_file: str,
         average_images: bool = True,
-        correction: str = ''
+        correction: str = None,
+        verbose: bool = False
 ) -> np.ndarray:
     """
     Reads the CCD image(s) contained in a h5 file of interest and perform
@@ -183,10 +184,13 @@ def store_h5_ccd_image(
 
     correction: str
         Type of intensity correction to perform on the CCD image 'ccd_image'
-            - Nothing : Return the raw ccd image
+            - None : Return the raw ccd image
             - 'i0 blade' : Normalize ccd image by the right blade current
             - 'i0 RLRL' : Normalized by the XS111 RLRL diode (what is this?)
             - 'cps' : Normalize ccd image by acquisition time (counts per sec)
+
+    verbose: bool
+        Report the normalization values used
 
     RETURNS
     -----
@@ -197,6 +201,7 @@ def store_h5_ccd_image(
         with multiple frames, it cannot be stored in the method described from
         lines 196-205
     """
+
     # Open the h5 file of interest
     with h5py.File(path_file, 'r') as h5_file:
         # Define the h5 database with the ccd image stack and the labview data
@@ -222,14 +227,44 @@ def store_h5_ccd_image(
                 im_ccd[i] = np.mean(h5_ccd_db[i], axis=0)
 
         else:
+            # May the Lord have mercy on your RAM...
             im_ccd = h5_ccd_db[:]
 
-        # Iterate through all the individual images in the stack
-        #for i in range(data_shape[0]):
-        #    # Get the image
-        #    im_ccd[i] = get_single_ccd_image(h5_inst_db, i, correction)
+        # Process the individual im_ccd images using corrections
+        # TODO: Make sure that this code also works when average_image is not
+        #       set to true
+        if correction is not None:
+            for idx in range(data_shape[0]):
+                # Define norm_factor as a denominator term for normalization
+                norm_factor = 1  # No normalization
+                if 'i0 blade' in correction:  # Blade current i0 normalization
+                    i0_blade = np.abs(
+                        h5_labview_db['XS111LeftBladecurrent_diode'][idx])
+                    norm_factor *= i0_blade
+                    if verbose:
+                        print(f'XS111LeftBladecurrent_diode: {i0_blade}')
+
+                if 'i0 rlrl' in correction:  # XS111 RLRL diode normalization
+                    i0_rlrl = np.abs(
+                        h5_labview_db['XS111RLRL_diode'][idx])
+                    norm_factor *= i0_rlrl
+                    if verbose:
+                        print(f'XS111RLRL_diode: {i0_blade}')
+
+                if 'cps' in correction:  # Convert intensity to counts-per-second
+                    count_time = h5_inst_db['detector_1']['count_time'][()] / 1000
+                    norm_factor *= count_time
+                    if verbose:
+                        print(f'Count time: {count_time} seconds')
+
+                #if {'i0 blade', 'i0 rlrl', 'cps'}.isdisjoint(correction):
+                #    raise ValueError(
+                #        'An invalid correction method has been specified.')
+
+                im_ccd[idx] /= norm_factor
 
     return im_ccd
+
 
 def store_h5_ccd_image_single_measurement(
         path_file: str,
@@ -269,6 +304,7 @@ def store_h5_ccd_image_single_measurement(
         h5_ccd_db = h5_inst_db['detector_1']['data']
         h5_labview_db = h5_inst_db['labview_data']
         return get_single_ccd_image(h5_inst_db, 0, correction)
+
 
 def batch_file_processing(
         path_dir: str,

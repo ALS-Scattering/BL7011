@@ -7,7 +7,8 @@
     Authors: Dayne Sasaki
 """
 import numpy as np
-
+import h5py
+from scipy import ndimage as ndi
 
 def preprocess_ccd_image(
         image: np.ndarray,
@@ -65,8 +66,8 @@ def calculate_dichroism(
 
 def align_detector_images(im_ref: str,
                           im_move: str,
-                          dataset_ref: dict,
-                          dataset_move: dict) -> np.ndarray:
+                          dataset_ref: h5py._hl.dataset.Dataset,
+                          dataset_move: h5py._hl.dataset.Dataset) -> np.ndarray:
     """
     Aligns pairs of detector images given their respective detector translate
      and 2theta values stored in the 'instrument_1' dataset of the original
@@ -106,6 +107,8 @@ def align_detector_images(im_ref: str,
     # complain if they are not.
     if not ((sample_detector_distance != dataset_move['detector_1']['distance'][()])
             or (pixel_size != dataset_ref['detector_1']['y_pixel_size'][()])):
+
+
         raise ValueError('Alignment cannot be performed between images with'
                          'two different sample-detector distances or pixel '
                          'sizes.')

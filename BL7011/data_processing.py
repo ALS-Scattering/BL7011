@@ -89,19 +89,26 @@ def align_detector_images(im_ref: str,
     """
 
     # Define a function to grab the different datasets from the HDF5 file
-    def metadata_grabber(path:str) -> dict:
+    def metadata_grabber(path: str) -> dict:
         # First, define an empty dictionary
         metadata = {}
 
         # Open up the h5 file and store the datasets in 'metadata'
         with h5py.File(path, 'r') as file:
-            # Create a variable for the parent group that the datasets are stored within
+            # Create a variable for the parent group that the datasets are
+            # stored within
             grp = file['entry1']['instrument_1']
-            metadata['det_translate'] = grp['labview_data']['det_translate'][0]
-            metadata['detector_rotate'] = grp['labview_data']['detector_rotate'][0]
-            metadata['detector_distance'] = grp['detector_1']['distance'][0]
-            metadata['x_pixel_size'] = grp['detector_1']['x_pixel_size'][0]
-            metadata['y_pixel_size'] = grp['detector_1']['y_pixel_size'][0]
+
+            # Grab the metadata and convert length-based motor positions
+            # into units of meters
+            metadata['detector_distance'] = grp['detector_1']['distance'][()]
+            metadata['x_pixel_size'] = grp['detector_1']['x_pixel_size'][()]
+            metadata['y_pixel_size'] = grp['detector_1']['y_pixel_size'][()]
+            # According to Sophie, det_translate is in units of mm
+            metadata['det_translate'] = grp['labview_data']['det_translate'][0] / 1e3
+
+            # Convert angle-values from degrees to radians
+            metadata['detector_rotate'] = np.deg2rad(grp['labview_data']['detector_rotate'][0])
 
         return metadata
 
@@ -116,8 +123,8 @@ def align_detector_images(im_ref: str,
 
     # Check that the parameters are consistent between the two images...
     # complain if they are not.
-    if not ((md_ref['detector_distance'] != md_move['detector_distance'])
-            or (md_ref['x_pixel_size'] != md_move['x_pixel_size'])):
+    if not ((md_ref['detector_distance'] == md_move['detector_distance'])
+            or (md_ref['x_pixel_size'] == md_move['x_pixel_size'])):
 
         raise ValueError('Alignment cannot be performed between images with'
                          'two different sample-detector distances or pixel '
@@ -130,4 +137,11 @@ def align_detector_images(im_ref: str,
                          / md_ref['x_pixel_size'])
 
     # Apply the shift to the image
-    return ndi.shift(im_move, (shift_tth,shift_translate))
+    print(f'md_ref[det_rotate]: {md_ref['detector_rotate']}')
+    print(f'md_move[det_rotate]: {md_move['detector_rotate']}')
+    print(f'md_ref[detector_distance]: {md_ref['detector_distance']} m')
+    print(f'md_ref[x_pixel_size] = {md_ref['x_pixel_size']} m')
+    print(
+        f'tth shift: {shift_tth*md_ref['x_pixel_size']} m, translate shift: {shift_translate*md_ref['x_pixel_size']} m')
+    print(f'tth shift: {shift_tth} pixels, translate shift: {shift_translate} pixels')
+    return shift_tth, shift_translate #ndi.shift(im_move, (shift_translate, shift_tth))

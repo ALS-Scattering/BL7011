@@ -54,9 +54,9 @@ def calculate_dichroism(
                       (image_pol_A - image_pol_B) / (image_pol_A + image_pol_B)
     """
     image_dichroism = image_pol_A - image_pol_B
-    if mode is 'difference':
+    if mode == 'difference':
         return image_dichroism
-    elif mode is 'asymmetry':
+    elif mode == 'asymmetry':
         return image_dichroism / (image_pol_A + image_pol_B)
     else:
         raise ValueError(
@@ -79,7 +79,7 @@ def align_detector_images(im_ref: str,
     im_move: The image that will be aligned to im_ref, with size M x N
     path_ref: The path to the HDF5 dataset associated with im_ref
         (i.e., h5_file['entry1']['instrument_1')
-    path_move: The patht o the HDF5 dataset associated with im_move
+    path_move: The path to the HDF5 dataset associated with im_move
 
     Returns
     -------
@@ -95,11 +95,13 @@ def align_detector_images(im_ref: str,
 
         # Open up the h5 file and store the datasets in 'metadata'
         with h5py.File(path, 'r') as file:
-            metadata['det_translate'] = file['labview_data']['det_translate'][()]
-            metadata['detector_rotate'] = file['labview_data']['detector_rotate'][()]
-            metadata['detector_distance'] = file['detector_1']['distance'][()]
-            metadata['x_pixel_size'] = file['detector_1']['x_pixel_size'][()]
-            metadata['y_pixel_size'] = ['detector_1']['y_pixel_size'][()]
+            # Create a variable for the parent group that the datasets are stored within
+            grp = file['entry1']['instrument_1']
+            metadata['det_translate'] = grp['labview_data']['det_translate'][0]
+            metadata['detector_rotate'] = grp['labview_data']['detector_rotate'][0]
+            metadata['detector_distance'] = grp['detector_1']['distance'][0]
+            metadata['x_pixel_size'] = grp['detector_1']['x_pixel_size'][0]
+            metadata['y_pixel_size'] = grp['detector_1']['y_pixel_size'][0]
 
         return metadata
 

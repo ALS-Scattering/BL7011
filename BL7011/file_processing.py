@@ -47,7 +47,7 @@ def get_all_file_names(
         file name
     """
     # Get a dictionary of ".h5" file path names
-    path_file = dict(
+    path_file: dict[int, str] = dict(
         (index, path)  # Get both the h5 file path and index...
         for index, path  # ... for all h5 file paths and indices...
         in enumerate(sorted(glob(path_dir + '*.h5')))  # ... in the directory..

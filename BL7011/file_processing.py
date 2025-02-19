@@ -21,7 +21,8 @@ def get_all_file_names(
         path_dir: str,
         *,
         search: str = '',
-        verbose: bool = True,
+        extension: str = 'h5',
+        verbose: bool = True
 ):
     """
     Gets all the names of files with an ".h5" extension in the directory
@@ -35,6 +36,8 @@ def get_all_file_names(
         "search" is a string that the function will look for in the different
         file names. Specifying "search" will cause the function to only return
         those file names which contain the specified string.
+    extension: str
+        File extension
     verbose: bool
         If set to True, the function will print out the names of each file
         along  with its associated index in the dictionary. By default, this is
@@ -50,7 +53,7 @@ def get_all_file_names(
     path_file: dict[int, str] = dict(
         (index, path)  # Get both the h5 file path and index...
         for index, path  # ... for all h5 file paths and indices...
-        in enumerate(sorted(glob(path_dir + '*.h5')))  # ... in the directory..
+        in enumerate(sorted(glob(path_dir + '*.' + extension)))  # ... in the directory..
         if search in path)  # ... if the h5 file has the phrase in "search"
 
     # Line-by-line, print out the collected base names (i.e., file name)

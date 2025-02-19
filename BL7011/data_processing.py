@@ -42,9 +42,9 @@ def calculate_dichroism(
     np.ndarray of the calculated dichroism image
     """
     image_dichroism = image_pol_a - image_pol_b
-    if mode is 'difference':
+    if mode == 'difference':
         return image_dichroism
-    elif mode is 'asymmetry':
+    elif mode == 'asymmetry':
         return image_dichroism / (image_pol_a + image_pol_b)
     else:
         raise ValueError(
